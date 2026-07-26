@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Civil Twin</title>
+  <link rel="stylesheet" href="styles.css" />
+
+  <!-- Iconos modernos -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+
+  <!-- Librerías gratuitas -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.161.0/build/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.161.0/examples/js/controls/OrbitControls.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+</head>
+<body>
+  <div id="loader" class="loader">
+    <div class="loader__card">
+      <div class="loader__spinner"></div>
+      <h2>Civil Twin</h2>
+      <p>Cargando entorno profesional...</p>
+    </div>
+  </div>
+
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar">
+      <div class="brand">
+        <div class="brand__logo">
+          <i class="fa-solid fa-compass-drafting"></i>
+        </div>
+        <div>
+          <h1>Civil Twin</h1>
+          <span>Digital Twin Civil</span>
+        </div>
+      </div>
+
+      <nav class="sidebar__nav">
+        <button class="nav-item active" data-section="dashboard"><i class="fa-solid fa-chart-line"></i><span>Dashboard</span></button>
+        <button class="nav-item" data-section="proyecto"><i class="fa-solid fa-folder-open"></i><span>Proyecto</span></button>
+        <button class="nav-item" data-section="modelo3d"><i class="fa-solid fa-cube"></i><span>Modelo 3D</span></button>
+        <button class="nav-item" data-section="materiales"><i class="fa-solid fa-boxes-stacked"></i><span>Materiales</span></button>
+        <button class="nav-item" data-section="costos"><i class="fa-solid fa-coins"></i><span>Costos</span></button>
+        <button class="nav-item" data-section="cronograma"><i class="fa-solid fa-calendar-days"></i><span>Cronograma</span></button>
+        <button class="nav-item" data-section="ia"><i class="fa-solid fa-robot"></i><span>IA</span></button>
+        <button class="nav-item" data-section="reportes"><i class="fa-solid fa-file-pdf"></i><span>Reportes</span></button>
+        <button class="nav-item" data-section="configuracion"><i class="fa-solid fa-gear"></i><span>Configuración</span></button>
+      </nav>
+
+      <div class="sidebar__footer">
+        <button class="ghost-btn" id="btnSave"><i class="fa-solid fa-floppy-disk"></i> Guardar</button>
+        <button class="ghost-btn" id="btnLoad"><i class="fa-solid fa-folder-open"></i> Cargar</button>
+        <button class="ghost-btn danger" id="btnDelete"><i class="fa-solid fa-trash"></i> Eliminar</button>
+      </div>
+    </aside>
+
+    <div class="main">
+      <header class="topbar">
+        <button class="icon-btn mobile-only" id="btnToggleSidebar"><i class="fa-solid fa-bars"></i></button>
+
+        <div class="search">
+          <i class="fa-solid fa-magnifying-glass"></i>
+          <input id="searchInput" type="text" placeholder="Buscar en Civil Twin..." />
+        </div>
+
+        <div class="topbar__actions">
+          <button class="icon-btn" id="btnTheme" title="Modo oscuro"><i class="fa-solid fa-moon"></i></button>
+          <button class="primary-btn" id="btnExportPDF"><i class="fa-solid fa-file-export"></i> Exportar PDF</button>
+          <button class="primary-btn secondary" id="btnExportExcel"><i class="fa-solid fa-file-excel"></i> Exportar Excel</button>
+        </div>
+      </header>
+
+      <main class="content">
+        <section id="dashboard" class="section active">
+          <div class="section__header">
+            <div>
+              <h2>Dashboard</h2>
+              <p>Resumen ejecutivo del gemelo digital del proyecto.</p>
+            </div>
+          </div>
+
+          <div class="cards-grid" id="summaryCards"></div>
+
+          <div class="charts-grid">
+            <article class="panel">
+              <div class="panel__header"><h3>Costo estimado</h3></div>
+              <canvas id="chartCosts"></canvas>
+            </article>
+            <article class="panel">
+              <div class="panel__header"><h3>Avance</h3></div>
+              <canvas id="chartProgress"></canvas>
+            </article>
+            <article class="panel">
+              <div class="panel__header"><h3>Materiales</h3></div>
+              <canvas id="chartMaterials"></canvas>
+            </article>
+          </div>
+        </section>
+
+        <section id="proyecto" class="section">
+          <div class="section__header">
+            <div>
+              <h2>Proyecto</h2>
+              <p>Ingresa los datos base de la edificación.</p>
+            </div>
+          </div>
+
+          <article class="panel">
+            <form id="projectForm" class="form-grid">
+              <label>
+                <span>Nombre del proyecto</span>
+                <input name="nombre" type="text" placeholder="Edificio Central" required />
+              </label>
+
+              <label>
+                <span>Número de pisos</span>
+                <input name="pisos" type="number" min="1" value="5" required />
+              </label>
+
+              <label>
+                <span>Largo (m)</span>
+                <input name="largo" type="number" min="1" step="0.1" value="20" required />
+              </label>
+
+              <label>
+                <span>Ancho (m)</span>
+                <input name="ancho" type="number" min="1" step="0.1" value="12" required />
+              </label>
+
+              <label>
+                <span>Altura de piso (m)</span>
+                <input name="alturaPiso" type="number" min="2" step="0.1" value="3" required />
+              </label>
+
+              <label>
+                <span>Tipo de estructura</span>
+                <select name="estructura">
+                  <option>Concreto armado</option>
+                  <option>Acero estructural</option>
+                  <option>Mampostería confinada</option>
+                  <option>Mixta</option>
+                </select>
+              </label>
+
+              <label>
+                <span>Tipo de cimentación</span>
+                <select name="cimentacion">
+                  <option>Zapata aislada</option>
+                  <option>Losa de cimentación</option>
+                  <option>Pilotes</option>
+                  <option>Zapata corrida</option>
+                </select>
+              </label>
+
+              <label>
+                <span>Tipo de concreto</span>
+                <select name="concreto">
+                  <option>f'c 210 kg/cm²</option>
+                  <option>f'c 280 kg/cm²</option>
+                  <option>f'c 350 kg/cm²</option>
+                </select>
+              </label>
+
+              <label>
+                <span>Ubicación</span>
+                <input name="ubicacion" type="text" placeholder="Madrid, España" />
+              </label>
+
+              <label class="span-2">
+                <span>Observaciones</span>
+                <textarea name="observaciones" rows="4" placeholder="Información adicional del proyecto..."></textarea>
+              </label>
+
+              <div class="form-actions span-2">
+                <button class="primary-btn" type="submit">Generar Proyecto</button>
+                <button class="ghost-btn" type="button" id="btnResetForm">Restablecer</button>
+              </div>
+            </form>
+          </article>
+        </section>
+
+        <section id="modelo3d" class="section">
+          <div class="section__header">
+            <div>
+              <h2>Modelo 3D</h2>
+              <p>Vista conceptual del edificio con controles orbitales.</p>
+            </div>
+          </div>
+
+          <article class="panel panel--large">
+            <div class="panel__toolbar">
+              <button class="ghost-btn" id="btnWireframe"><i class="fa-solid fa-border-all"></i> Alámbrico</button>
+              <button class="ghost-btn" id="btnShadows"><i class="fa-solid fa-lightbulb"></i> Sombras</button>
+              <button class="ghost-btn" id="btnResetCamera"><i class="fa-solid fa-rotate-left"></i> Reiniciar vista</button>
+            </div>
+            <div id="threeContainer" class="three-container"></div>
+          </article>
+        </section>
+
+        <section id="materiales" class="section">
+          <div class="section__header">
+            <div>
+              <h2>Materiales</h2>
+              <p>Estimación automática de materiales principales.</p>
+            </div>
+          </div>
+          <article class="panel">
+            <div id="materialsTable" class="table-wrap"></div>
+          </article>
+        </section>
+
+        <section id="costos" class="section">
+          <div class="section__header">
+            <div>
+              <h2>Costos</h2>
+              <p>Base editable con cálculo automático.</p>
+            </div>
+          </div>
+          <article class="panel">
+            <div id="costsModule" class="cost-grid"></div>
+            <div class="panel__footer">
+              <div class="kpi">
+                <span>Costo total</span>
+                <strong id="totalCost">—</strong>
+              </div>
+              <div class="kpi">
+                <span>Costo por m²</span>
+                <strong id="costPerM2">—</strong>
+              </div>
+              <div class="kpi">
+                <span>Costo por piso</span>
+                <strong id="costPerFloor">—</strong>
+              </div>
+            </div>
+          </article>
+        </section>
+
+        <section id="cronograma" class="section">
+          <div class="section__header">
+            <div>
+              <h2>Cronograma</h2>
+              <p>Plan base tipo Gantt con avance estimado.</p>
+            </div>
+          </div>
+          <article class="panel">
+            <div id="timelineList"></div>
+          </article>
+        </section>
+
+        <section id="ia" class="section">
+          <div class="section__header">
+            <div>
+              <h2>Asistente Civil AI</h2>
+              <p>Chat preparado para integración futura con ChatGPT o Gemini.</p>
+            </div>
+          </div>
+          <article class="panel">
+            <div id="chatWindow" class="chat-window"></div>
+            <div class="chat-input">
+              <input id="chatMessage" type="text" placeholder="Pregunta algo sobre el proyecto..." />
+              <button class="primary-btn" id="btnSendChat">Enviar</button>
+            </div>
+          </article>
+        </section>
+
+        <section id="reportes" class="section">
+          <div class="section__header">
+            <div>
+              <h2>Reportes</h2>
+              <p>Exportación profesional a PDF y base para Excel.</p>
+            </div>
+          </div>
+          <article class="panel">
+            <button class="primary-btn" id="btnGenerateReport"><i class="fa-solid fa-file-pdf"></i> Generar PDF</button>
+          </article>
+        </section>
+
+        <section id="configuracion" class="section">
+          <div class="section__header">
+            <div>
+              <h2>Configuración</h2>
+              <p>Preferencias generales de la aplicación.</p>
+            </div>
+          </div>
+          <article class="panel">
+            <p class="muted">La configuración avanzada se ampliará en la siguiente etapa.</p>
+          </article>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <div id="toastContainer" class="toast-container"></div>
+
+  <script type="module" src="script.js"></script>
+</body>
+</html>
