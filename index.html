@@ -193,14 +193,35 @@
             </div>
           </div>
 
-          <article class="panel panel--large">
-            <div class="panel__toolbar">
-              <button class="ghost-btn" id="btnWireframe"><i class="fa-solid fa-border-all"></i> Alámbrico</button>
-              <button class="ghost-btn" id="btnShadows"><i class="fa-solid fa-lightbulb"></i> Sombras</button>
-              <button class="ghost-btn" id="btnResetCamera"><i class="fa-solid fa-rotate-left"></i> Reiniciar vista</button>
-            </div>
-            <div id="threeContainer" class="three-container"></div>
-          </article>
+          <div class="plan-panel">
+  <div class="plan-fields">
+    <label>
+      <span>Plano de referencia</span>
+      <input id="planUpload" type="file" accept="image/*,.pdf" />
+    </label>
+
+    <label>
+      <span>Ancho real del plano (m)</span>
+      <input id="planWidth" type="number" min="1" step="0.1" placeholder="20" />
+    </label>
+
+    <label>
+      <span>Fondo real del plano (m)</span>
+      <input id="planDepth" type="number" min="1" step="0.1" placeholder="12" />
+    </label>
+
+    <div id="planInfo" class="plan-info">No hay plano cargado.</div>
+  </div>
+
+  <div class="panel__toolbar">
+    <button class="ghost-btn" id="btnWireframe"><i class="fa-solid fa-border-all"></i> Alámbrico</button>
+    <button class="ghost-btn" id="btnShadows"><i class="fa-solid fa-lightbulb"></i> Sombras</button>
+    <button class="ghost-btn" id="btnResetCamera"><i class="fa-solid fa-rotate-left"></i> Reiniciar vista</button>
+    <button class="ghost-btn danger" id="btnClearPlan"><i class="fa-solid fa-eraser"></i> Quitar plano</button>
+  </div>
+</div>
+
+<div id="threeContainer" class="three-container"></div>
         </section>
 
         <section id="materiales" class="section">
