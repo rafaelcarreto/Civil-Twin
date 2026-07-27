@@ -46,6 +46,18 @@ export function generatePDF(project, metrics, timeline, materialsTable) {
   doc.text(`Costo estimado: ${formatMoney(metrics.costs.totalCost)}`, 14, y); y += 6;
   doc.text(`Duración estimada: ${metrics.durationWeeks} semanas`, 14, y); y += 10;
 
+if (project.plan?.dataUrl) {
+  if (y > 220) {
+    doc.addPage();
+    y = 14;
+  }
+  doc.setFont("helvetica", "bold");
+  doc.text("Plano de referencia", 14, y);
+  y += 6;
+  doc.addImage(project.plan.dataUrl, "PNG", 14, y, 180, 90);
+  y += 98;
+}
+  
   doc.setFont("helvetica", "bold");
   doc.text("Materiales", 14, y);
   y += 6;
