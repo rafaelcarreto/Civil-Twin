@@ -1,10 +1,18 @@
 // script.js
-// Orquestador principal de Civil Twin.
+// Orquestador principal de Civil Twin con soporte de plano cargado por el usuario.
 
 import { calculateProjectMetrics, buildTimeline, buildMaterialsTable } from "./calculations.js";
 import { saveProject, loadProject, deleteProject, hasProject } from "./storage.js";
 import { renderCharts } from "./charts.js";
-import { init3D, update3D, toggleWireframe, toggleShadows, resetView } from "./model3d.js";
+import {
+  init3D,
+  update3D,
+  toggleWireframe,
+  toggleShadows,
+  resetView,
+  setPlanReferenceFromFile,
+  clearPlanReference
+} from "./model3d.js";
 import { generatePDF } from "./report.js";
 import {
   showSection,
@@ -14,7 +22,8 @@ import {
   renderMaterialsTable,
   renderCostsModule,
   renderTimeline,
-  renderChat
+  renderChat,
+  renderPlanInfo
 } from "./ui.js";
 
 const defaultProject = {
@@ -34,7 +43,8 @@ const defaultProject = {
     cement: 9.5,
     sand: 24,
     gravel: 28
-  }
+  },
+  plan: null
 };
 
 let currentProject = loadProject() || structuredClone(defaultProject);
@@ -50,10 +60,13 @@ function initApp() {
   bindTopbarActions();
   bindProjectForm();
   bindChat();
-  bindCostInputs();
   bind3DControls();
   bindSearch();
   bindSidebarToggle();
+  bindPlanControls();
+
+  fillForm(currentProject);
+  syncPlanUI(currentProject.plan);
 
   updateAll();
 
@@ -75,9 +88,16 @@ function updateAll() {
   renderCostsModule(currentProject, currentMetrics, updatePrices);
   renderTimeline(currentTimeline, currentMetrics.durationWeeks);
   renderChat(chatMessages);
+  renderPlanInfo(currentProject.plan);
 
   renderCharts(currentMetrics, currentTimeline);
-  init3D(document.getElementById("threeContainer"), currentProject);
+
+  init3D(document.getElementById("threeContainer"), currentProject, {
+    planUrl: currentProject.plan?.dataUrl,
+    planWidthMeters: currentProject.plan?.widthMeters,
+    planDepthMeters: currentProject.plan?.depthMeters,
+    planOpacity: 0.52
+  });
 }
 
 function updatePrices(prices) {
@@ -109,6 +129,7 @@ function bindTopbarActions() {
     if (loaded) {
       currentProject = loaded;
       fillForm(loaded);
+      syncPlanUI(loaded.plan);
       updateAll();
       notify("Proyecto cargado correctamente.", "success");
     } else {
@@ -120,6 +141,8 @@ function bindTopbarActions() {
     deleteProject();
     currentProject = structuredClone(defaultProject);
     fillForm(currentProject);
+    syncPlanUI(null);
+    clearPlanReference();
     updateAll();
     notify("Proyecto eliminado.", "warning");
   });
@@ -131,7 +154,6 @@ function bindTopbarActions() {
 
 function bindProjectForm() {
   const form = document.getElementById("projectForm");
-  fillForm(currentProject);
 
   form.addEventListener("submit", (e) => {
     e.preventDefault();
@@ -144,7 +166,8 @@ function bindProjectForm() {
       largo: Number(data.largo),
       ancho: Number(data.ancho),
       alturaPiso: Number(data.alturaPiso),
-      prices: currentProject.prices
+      prices: currentProject.prices,
+      plan: currentProject.plan
     };
 
     saveProject(currentProject);
@@ -156,9 +179,83 @@ function bindProjectForm() {
   document.getElementById("btnResetForm").addEventListener("click", () => {
     currentProject = structuredClone(defaultProject);
     fillForm(currentProject);
+    syncPlanUI(null);
+    clearPlanReference();
     updateAll();
     notify("Formulario restablecido.", "info");
   });
+}
+
+function bindPlanControls() {
+  const planUpload = document.getElementById("planUpload");
+  const planWidth = document.getElementById("planWidth");
+  const planDepth = document.getElementById("planDepth");
+  const clearBtn = document.getElementById("btnClearPlan");
+
+  planUpload?.addEventListener("change", async () => {
+    const file = planUpload.files?.[0];
+    if (!file) return;
+
+    try {
+      const widthMeters = Number(planWidth.value) || Number(currentProject.largo) || 20;
+      const depthMeters = Number(planDepth.value) || Number(currentProject.ancho) || 12;
+
+      const dataUrl = await setPlanReferenceFromFile(file, { widthMeters, depthMeters, opacity: 0.52 });
+
+      currentProject = {
+        ...currentProject,
+        plan: {
+          fileName: file.name,
+          mimeType: file.type,
+          dataUrl,
+          widthMeters,
+          depthMeters,
+          uploadedAt: new Date().toISOString()
+        }
+      };
+
+      saveProject(currentProject);
+      updateAll();
+      notify("Plano cargado y vinculado al modelo 3D.", "success");
+    } catch (error) {
+      console.error(error);
+      notify(error.message || "No se pudo cargar el plano.", "warning");
+    }
+  });
+
+  planWidth?.addEventListener("change", () => {
+    updatePlanCalibration();
+  });
+
+  planDepth?.addEventListener("change", () => {
+    updatePlanCalibration();
+  });
+
+  clearBtn?.addEventListener("click", () => {
+    currentProject.plan = null;
+    clearPlanReference();
+    syncPlanUI(null);
+    saveProject(currentProject);
+    updateAll();
+    notify("Plano eliminado del proyecto.", "info");
+  });
+}
+
+function updatePlanCalibration() {
+  if (!currentProject.plan) return;
+
+  const planWidth = Number(document.getElementById("planWidth")?.value) || currentProject.plan.widthMeters || currentProject.largo;
+  const planDepth = Number(document.getElementById("planDepth")?.value) || currentProject.plan.depthMeters || currentProject.ancho;
+
+  currentProject.plan = {
+    ...currentProject.plan,
+    widthMeters: planWidth,
+    depthMeters: planDepth
+  };
+
+  saveProject(currentProject);
+  updateAll();
+  notify("Calibración del plano actualizada.", "success");
 }
 
 function bindChat() {
@@ -170,10 +267,7 @@ function bindChat() {
     if (!text) return;
 
     chatMessages.push({ role: "user", text });
-    chatMessages.push({
-      role: "ai",
-      text: consultarIA(text)
-    });
+    chatMessages.push({ role: "ai", text: consultarIA(text) });
 
     input.value = "";
     renderChat(chatMessages);
@@ -186,18 +280,13 @@ function bindChat() {
 }
 
 function consultarIA(prompt) {
-  // Esta función queda preparada para conectarse más adelante con ChatGPT o Gemini.
-  // Por ahora responde con lógica local y contexto del proyecto.
   const area = currentMetrics.area.toFixed(2);
-  const cost = new Intl.NumberFormat("es-ES", { style: "currency", currency: "EUR" }).format(currentMetrics.costs.totalCost);
+  const cost = new Intl.NumberFormat("es-ES", {
+    style: "currency",
+    currency: "EUR"
+  }).format(currentMetrics.costs.totalCost);
 
-  return `Con base en el proyecto "${currentProject.nombre}", el área es ${area} m² y el costo estimado es ${cost}. 
-Tu consulta fue: "${prompt}". 
-En una siguiente etapa, esta función se conectará a una API externa de IA.`;
-}
-
-function bindCostInputs() {
-  // Se re-renderiza desde renderCostsModule; aquí solo dejamos el punto de integración.
+  return `Con base en "${currentProject.nombre}", el área es ${area} m² y el costo estimado es ${cost}. Tu consulta fue: "${prompt}". En una siguiente etapa, esta función se conectará a una API externa de IA.`;
 }
 
 function bind3DControls() {
@@ -256,6 +345,17 @@ function fillForm(project) {
   });
 }
 
+function syncPlanUI(plan) {
+  const planWidth = document.getElementById("planWidth");
+  const planDepth = document.getElementById("planDepth");
+  const planUpload = document.getElementById("planUpload");
+
+  if (planWidth) planWidth.value = plan?.widthMeters ?? "";
+  if (planDepth) planDepth.value = plan?.depthMeters ?? "";
+  if (planUpload) planUpload.value = "";
+  renderPlanInfo(plan);
+}
+
 function exportPDF() {
   try {
     const materials = buildMaterialsTable(currentMetrics);
@@ -268,8 +368,6 @@ function exportPDF() {
 }
 
 function exportExcelStub() {
-  // Esta etapa deja lista la intención de exportación.
-  // En la siguiente etapa se implementará exportación real a Excel/XLSX.
   const csvRows = [
     ["Concepto", "Valor"],
     ["Proyecto", currentProject.nombre],
