@@ -1,13 +1,13 @@
 // model3d.js
-// Civil Twin - Motor 3D corregido con Three.js en modo módulo.
-// Soporta:
-// - rotación, zoom y paneo con OrbitControls
-// - ejes
+// Civil Twin - Motor 3D con:
+// - Three.js en modo módulo
+// - modelo conceptual por pisos
+// - carga de plano de referencia como imagen
+// - rotación, zoom, paneo
 // - wireframe
 // - sombras
 // - reinicio de cámara
-// - carga de plano de referencia como imagen/SVG
-// - actualización del modelo desde los datos del proyecto
+// - actualización desde datos del proyecto
 
 import * as THREE from "three";
 import { OrbitControls } from "https://cdn.jsdelivr.net/npm/three@0.161.0/examples/jsm/controls/OrbitControls.js";
@@ -41,6 +41,20 @@ function normalizeProject(project = {}) {
   };
 }
 
+function disposeObject3D(obj) {
+  if (!obj) return;
+  obj.traverse?.((child) => {
+    if (child.geometry) child.geometry.dispose?.();
+    if (child.material) {
+      if (Array.isArray(child.material)) {
+        child.material.forEach((m) => m.dispose?.());
+      } else {
+        child.material.dispose?.();
+      }
+    }
+  });
+}
+
 function disposeScene() {
   cancelAnimationFrame(state.requestId);
   state.requestId = null;
@@ -53,22 +67,32 @@ function disposeScene() {
   if (state.renderer) {
     state.renderer.dispose();
     state.renderer.forceContextLoss?.();
-    if (state.renderer.domElement && state.renderer.domElement.parentElement) {
+    if (state.renderer.domElement?.parentElement) {
       state.renderer.domElement.parentElement.removeChild(state.renderer.domElement);
     }
     state.renderer = null;
   }
 
+  disposeObject3D(state.buildingGroup);
+  disposeObject3D(state.referenceGroup);
+
   if (state.planTexture) {
-    state.planTexture.dispose();
+    state.planTexture.dispose?.();
     state.planTexture = null;
   }
 
-  state.planMesh = null;
-  state.buildingGroup = null;
-  state.referenceGroup = null;
+  if (state.planUrl) {
+    try {
+      URL.revokeObjectURL(state.planUrl);
+    } catch (_) {}
+    state.planUrl = null;
+  }
+
   state.scene = null;
   state.camera = null;
+  state.buildingGroup = null;
+  state.referenceGroup = null;
+  state.planMesh = null;
 }
 
 function createScene(container) {
@@ -103,18 +127,10 @@ function createScene(container) {
   const dirLight = new THREE.DirectionalLight(0xffffff, 1.15);
   dirLight.position.set(18, 24, 12);
   dirLight.castShadow = state.shadows;
-  dirLight.shadow.mapSize.width = 2048;
-  dirLight.shadow.mapSize.height = 2048;
-  dirLight.shadow.camera.near = 1;
-  dirLight.shadow.camera.far = 80;
-  dirLight.shadow.camera.left = -30;
-  dirLight.shadow.camera.right = 30;
-  dirLight.shadow.camera.top = 30;
-  dirLight.shadow.camera.bottom = -30;
   state.scene.add(dirLight);
 
-  const helper = new THREE.AxesHelper(10);
-  state.scene.add(helper);
+  const axes = new THREE.AxesHelper(10);
+  state.scene.add(axes);
 
   const ground = new THREE.Mesh(
     new THREE.PlaneGeometry(120, 120),
@@ -148,42 +164,31 @@ function onResize() {
   state.renderer.setSize(width, height);
 }
 
-function clearBuilding() {
-  if (!state.buildingGroup) return;
-
-  while (state.buildingGroup.children.length) {
-    const child = state.buildingGroup.children.pop();
-    child.geometry?.dispose?.();
-    if (Array.isArray(child.material)) {
-      child.material.forEach(m => m.dispose?.());
-    } else {
-      child.material?.dispose?.();
-    }
+function clearGroup(group) {
+  if (!group) return;
+  while (group.children.length) {
+    const child = group.children.pop();
+    disposeObject3D(child);
   }
 }
 
+function clearBuilding() {
+  clearGroup(state.buildingGroup);
+}
+
 function clearReferencePlan() {
-  if (!state.referenceGroup) return;
-
-  while (state.referenceGroup.children.length) {
-    const child = state.referenceGroup.children.pop();
-    child.geometry?.dispose?.();
-    if (Array.isArray(child.material)) {
-      child.material.forEach(m => m.dispose?.());
-    } else {
-      child.material?.dispose?.();
-    }
-  }
-
+  clearGroup(state.referenceGroup);
   state.planMesh = null;
 
   if (state.planTexture) {
-    state.planTexture.dispose();
+    state.planTexture.dispose?.();
     state.planTexture = null;
   }
 
   if (state.planUrl) {
-    URL.revokeObjectURL(state.planUrl);
+    try {
+      URL.revokeObjectURL(state.planUrl);
+    } catch (_) {}
     state.planUrl = null;
   }
 }
@@ -193,11 +198,10 @@ function createFootprintGrid(project) {
   const width = project.ancho;
 
   const group = new THREE.Group();
-
   const mat = new THREE.LineBasicMaterial({ color: 0x7c8aa5 });
   const y = 0.02;
 
-  const points = [
+  const outlinePoints = [
     new THREE.Vector3(-length / 2, y, -width / 2),
     new THREE.Vector3(length / 2, y, -width / 2),
     new THREE.Vector3(length / 2, y, width / 2),
@@ -205,11 +209,8 @@ function createFootprintGrid(project) {
     new THREE.Vector3(-length / 2, y, -width / 2),
   ];
 
-  const geo = new THREE.BufferGeometry().setFromPoints(points);
-  const outline = new THREE.Line(geo, mat);
-  group.add(outline);
+  group.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(outlinePoints), mat));
 
-  // retícula sencilla de referencia
   const gridSizeX = Math.max(2, Math.round(length / 5));
   const gridSizeY = Math.max(2, Math.round(width / 5));
 
@@ -241,17 +242,10 @@ function createColumns(project) {
   const height = project.alturaPiso;
 
   const group = new THREE.Group();
-
   const gridX = Math.max(2, Math.round(length / 6));
   const gridY = Math.max(2, Math.round(width / 6));
 
   const columnRadius = 0.18;
-  const columnMat = new THREE.MeshStandardMaterial({
-    color: 0x0f2747,
-    wireframe: state.wireframe,
-    roughness: 0.8,
-    metalness: 0.05,
-  });
 
   for (let ix = 0; ix <= gridX; ix++) {
     for (let iy = 0; iy <= gridY; iy++) {
@@ -259,8 +253,15 @@ function createColumns(project) {
       const z = -width / 2 + (width / gridY) * iy;
       const colHeight = floors * height + 0.2;
 
+      const material = new THREE.MeshStandardMaterial({
+        color: 0x0f2747,
+        wireframe: state.wireframe,
+        roughness: 0.8,
+        metalness: 0.05,
+      });
+
       const geometry = new THREE.CylinderGeometry(columnRadius, columnRadius, colHeight, 16);
-      const column = new THREE.Mesh(geometry, columnMat.clone());
+      const column = new THREE.Mesh(geometry, material);
       column.position.set(x, colHeight / 2, z);
       column.castShadow = state.shadows;
       column.receiveShadow = state.shadows;
@@ -322,7 +323,6 @@ function createPerimeterBeams(project) {
   const floorHeight = project.alturaPiso;
 
   const group = new THREE.Group();
-
   const beamMat = new THREE.MeshStandardMaterial({
     color: 0x475569,
     wireframe: state.wireframe,
@@ -369,17 +369,15 @@ function buildBuilding(project) {
   state.project = normalized;
 
   const footprint = createFootprintGrid(normalized);
-  state.buildingGroup.add(footprint);
-
   const columns = createColumns(normalized);
   const slabs = createSlabs(normalized);
   const beams = createPerimeterBeams(normalized);
 
+  state.buildingGroup.add(footprint);
   state.buildingGroup.add(columns);
   state.buildingGroup.add(slabs);
   state.buildingGroup.add(beams);
 
-  // Centrar grupo por si hay cambios futuros
   state.buildingGroup.position.set(0, 0, 0);
 }
 
@@ -437,7 +435,6 @@ function animate() {
 
 export async function init3D(container, project, options = {}) {
   disposeScene();
-
   createScene(container);
   buildBuilding(project);
 
@@ -460,7 +457,6 @@ export function update3D(project) {
   if (!state.scene || !state.container) return;
   buildBuilding(project);
 
-  // Si hay plano cargado, lo mantenemos visible y reescalado según proyecto
   if (state.planUrl && state.planMesh) {
     const widthMeters = state.project?.largo || 20;
     const depthMeters = state.project?.ancho || 12;
@@ -479,7 +475,6 @@ export function toggleWireframe(project) {
 
 export function toggleShadows(project) {
   state.shadows = !state.shadows;
-
   if (state.renderer) state.renderer.shadowMap.enabled = state.shadows;
   update3D(project);
   return state.shadows;
@@ -487,7 +482,6 @@ export function toggleShadows(project) {
 
 export function resetView() {
   if (!state.camera || !state.controls) return;
-
   state.camera.position.set(20, 16, 20);
   state.controls.target.set(0, 4, 0);
   state.controls.update();
@@ -497,29 +491,26 @@ export async function setPlanReferenceFromFile(file, options = {}) {
   if (!file) throw new Error("No se recibió ningún archivo.");
 
   const mime = file.type || "";
-  const isImage = mime.startsWith("image/");
-
-  if (!isImage) {
-    throw new Error(
-      "Por ahora este módulo acepta imágenes (PNG, JPG, WEBP, SVG). Para PDF se añadirá soporte en la fase 2 con pdf.js."
-    );
+  if (!mime.startsWith("image/")) {
+    throw new Error("En esta fase se admiten imágenes: PNG, JPG, WEBP o SVG.");
   }
 
+  const dataUrl = await readFileAsDataURL(file);
+
   if (state.planUrl) {
-    URL.revokeObjectURL(state.planUrl);
+    try {
+      URL.revokeObjectURL(state.planUrl);
+    } catch (_) {}
     state.planUrl = null;
   }
 
-  const objectUrl = URL.createObjectURL(file);
-  state.planUrl = objectUrl;
-
-  await setPlanReferenceFromUrl(objectUrl, options);
-  return true;
+  state.planUrl = dataUrl;
+  await setPlanReferenceFromUrl(dataUrl, options);
+  return dataUrl;
 }
 
 export async function setPlanReferenceFromUrl(url, options = {}) {
   if (!state.scene) {
-    // Se guarda para cuando se inicialice el motor
     state.planUrl = url;
     return true;
   }
@@ -535,4 +526,13 @@ export function clearPlanReference() {
 export function get3DImage() {
   if (!state.renderer) return null;
   return state.renderer.domElement.toDataURL("image/png");
+}
+
+function readFileAsDataURL(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(new Error("No se pudo leer el archivo."));
+    reader.readAsDataURL(file);
+  });
 }
