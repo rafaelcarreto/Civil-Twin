@@ -148,3 +148,17 @@ function formatMoney(value) {
     currency: "EUR"
   }).format(value || 0);
 }
+export function renderPlanInfo(plan) {
+  const el = document.getElementById("planInfo");
+  if (!el) return;
+
+  if (!plan || !plan.dataUrl) {
+    el.innerHTML = "No hay plano cargado.";
+    return;
+  }
+
+  el.innerHTML = `
+    <strong>${plan.fileName || "Plano cargado"}</strong><br>
+    Ancho real: ${Number(plan.widthMeters || 0).toFixed(2)} m · Fondo real: ${Number(plan.depthMeters || 0).toFixed(2)} m
+  `;
+}
